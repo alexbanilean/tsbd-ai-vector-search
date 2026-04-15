@@ -17,6 +17,13 @@ def test_cli_parser_seed_defaults():
     args = p.parse_args(["seed"])
     assert args.path == "data/papers.json"
     assert args.replace is False
+    assert args.skip_vector_index is False
+
+
+def test_cli_parser_seed_skip_vector_index():
+    p = build_parser()
+    args = p.parse_args(["seed", "--skip-vector-index"])
+    assert args.skip_vector_index is True
 
 
 def test_cli_set_vector_memory():

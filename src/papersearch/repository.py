@@ -137,7 +137,12 @@ def init_schema(
         logger.info("Created papers table with VECTOR(%s, FLOAT32)", dim)
 
 
-def ensure_vector_index(conn: oracledb.Connection, settings: Settings | None = None) -> bool:
+def ensure_vector_index(
+    conn: oracledb.Connection,
+    settings: Settings | None = None,
+    *,
+    skip: bool = False,
+) -> bool:
     """Create HNSW vector index when table has rows. Returns True if index exists at end."""
     cfg = settings or get_settings()
     logger.info("Ensuring vector index (embedding_dim=%s)", cfg.embedding_dimension)
@@ -148,8 +153,14 @@ def ensure_vector_index(conn: oracledb.Connection, settings: Settings | None = N
             return True
         cursor.execute("SELECT COUNT(*) FROM papers")
         (count,) = cursor.fetchone()
-        if int(count) == 0:
+        nrows = int(count)
+        if nrows == 0:
             logger.warning("Skipping vector index: papers table is empty")
+            return False
+        if skip:
+            logger.info(
+                "Skipping vector index creation (--skip-vector-index); exact search will be used."
+            )
             return False
 
         # HNSW approximate index — Oracle AI Vector Search (tiered fallbacks on ORA-51962).
@@ -167,8 +178,8 @@ def ensure_vector_index(conn: oracledb.Connection, settings: Settings | None = N
                 conn.rollback()
                 last_err = e
                 if 51962 in _ora_codes(e):
-                    logger.warning(
-                        "Vector index build hit ORA-51962 (%s); retrying with lighter HNSW: %s",
+                    logger.debug(
+                        "ORA-51962 on HNSW tier %s; retrying lighter: %s",
                         label,
                         e,
                     )
@@ -177,13 +188,15 @@ def ensure_vector_index(conn: oracledb.Connection, settings: Settings | None = N
                 return False
 
         if last_err is not None:
-            logger.error(
-                "Could not create vector index after all HNSW tiers (ORA-51962). Try "
-                "`set-vector-memory` if your PDB allows it; on capped Oracle Free (ORA-51955) "
-                "HNSW may be impossible — search still uses exact VECTOR_DISTANCE without an "
-                "index. Last error: %s",
-                last_err,
+            logger.info(
+                "Vector HNSW index not created: vector memory pool could not fit any tier "
+                "(%s rows). This is common on Oracle Database Free with a small pool — "
+                "semantic search still uses exact VECTOR_DISTANCE (fast at this scale). "
+                "Optional: `set-vector-memory` if ORA-51955 does not block you; or "
+                "`seed --skip-vector-index` to skip index attempts.",
+                nrows,
             )
+            logger.debug("Last ORA from vector index build: %s", last_err)
         return False
 
 

@@ -64,12 +64,26 @@ def cmd_seed(args: argparse.Namespace) -> int:
                     cur.execute("TRUNCATE TABLE papers")
                 conn.commit()
             n = ingest_papers(conn, papers, matrix, settings=settings)
-            idx = ensure_vector_index(conn, settings=settings)
+            idx = ensure_vector_index(
+                conn, settings=settings, skip=args.skip_vector_index
+            )
     except oracledb.Error as e:
         print(format_connect_help(settings), file=sys.stderr)
         print(e, file=sys.stderr)
         return 1
-    print(f"Seeded {n} papers. Vector index: {'ready' if idx else 'not created — see logs/README'}")
+    if idx:
+        print(f"Seeded {n} papers. Vector index: ready (HNSW + approximate fetch when enabled).")
+    elif args.skip_vector_index:
+        print(
+            f"Seeded {n} papers. Vector index: skipped by --skip-vector-index "
+            f"(exact VECTOR_DISTANCE search)."
+        )
+    else:
+        print(
+            f"Seeded {n} papers. Vector index: not created (vector pool full — normal on "
+            f"Oracle Free). Data and embeddings are in Oracle; exact search is active. "
+            f"Try: python3 -m papersearch.cli search \"your topic\""
+        )
     close_pool()
     return 0
 
@@ -94,10 +108,9 @@ def cmd_reindex_vector(args: argparse.Namespace) -> int:
         print("Vector index ready.")
         return 0
     print(
-        "Vector index was not created. If the PDB allows it, run: "
-        "python3 -m papersearch.cli set-vector-memory\n"
-        "On Oracle Free with ORA-51955 / ORA-51962 caps, skip that — semantic search still "
-        "works without HNSW (exact top-k).",
+        "Vector index was not created (pool full or unsupported). "
+        "If your PDB allows it: python3 -m papersearch.cli set-vector-memory\n"
+        "On capped Oracle Free this is expected — exact VECTOR_DISTANCE search still works.",
         file=sys.stderr,
     )
     return 2
@@ -200,6 +213,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_seed = sub.add_parser("seed", help="Load JSON corpus and build HNSW index")
     p_seed.add_argument("--path", default="data/papers.json", help="Path to papers JSON array")
     p_seed.add_argument("--replace", action="store_true", help="TRUNCATE papers before load")
+    p_seed.add_argument(
+        "--skip-vector-index",
+        action="store_true",
+        help="Do not attempt CREATE VECTOR INDEX (quieter on capped Oracle Free)",
+    )
     p_seed.set_defaults(func=cmd_seed)
 
     p_vm = sub.add_parser(

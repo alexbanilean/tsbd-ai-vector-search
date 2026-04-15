@@ -18,12 +18,14 @@ This repo keeps embeddings **outside** the database (Python + `sentence-transfor
 
 ```mermaid
 flowchart LR
-  U[Browser / curl] --> API[FastAPI :8000]
-  API --> E[Embedding model\nall-MiniLM-L6-v2]
-  API --> O[(Oracle 23ai\nFREEPDB1)]
-  E -->|float32[384]| API
-  O -->|VECTOR_DISTANCE\n+ optional ANN| API
+  U[Browser / curl] --> API["FastAPI :8000"]
+  API --> E["Embedding model (all-MiniLM-L6-v2)"]
+  API --> O[(Oracle 23ai, FREEPDB1)]
+  E -->|"384-dim float32"| API
+  O -->|"VECTOR_DISTANCE + optional ANN"| API
 ```
+
+Edge labels are **double-quoted** so GitHub’s Mermaid renderer does not interpret `float32[384]`-style brackets inside link text as node syntax.
 
 **Design choices (why this impresses engineers without overfitting the assignment):**
 
@@ -161,7 +163,7 @@ make demo
    - `GET /v1/health` → narrate **banner**, **papers_count**, **vector_index** (`yes` if HNSW built; `no` still allows exact vector top‑`k`).
    - Open `/` UI → run **3 qualitatively different** queries (below).
    - Open `/docs` → execute the same `POST /v1/search` and show JSON distances.
-   - Toggle story: if you temporarily drop the index (`DROP INDEX PAPERS_EMBEDDING_HNSW_IDX;`) and restart, show **exact** top‑k vs **approximate** path (optional advanced beat).
+   - Toggle story: if an HNSW index exists, compare **approximate** vs **exact** paths; on Oracle Free without an index, narrate **exact** top‑`k` only (optional: `DROP INDEX PAPERS_EMBEDDING_HNSW_IDX` when present).
 
 **Demo queries that land on different clusters in `data/papers.json`:**
 
@@ -183,7 +185,7 @@ This repository is designed so you can attach **objective artifacts** even if a 
 | **Working source** | `src/papersearch/` |
 | **Runnable instructions** | This README + `Makefile` |
 | **Screenshots (you capture during rehearsal)** | Create `docs/screenshots/` and add PNGs — e.g. `docker compose ps`, `/v1/health` JSON, UI results for two queries, `/docs` try-it-out panel |
-| **Logs** | Terminal output from `seed` (shows index creation) and `serve` |
+| **Logs** | Terminal output from `seed` (ingest + optional HNSW attempt) and `serve` |
 | **Interpretation notes** | “15-minute flow” + “Troubleshooting” sections here |
 
 ---
@@ -201,9 +203,9 @@ This repository is designed so you can attach **objective artifacts** even if a 
 
 ### `ORA-51962: The vector memory area is out of space`
 
-Oracle reserves a separate **vector pool** for HNSW / IVF structures. On a fresh **Oracle Free** PDB the limit is often **too low for `CREATE VECTOR INDEX`**, so seeding succeeds but the index step logs this error.
+Oracle reserves a separate **vector pool** for HNSW / IVF structures. On a fresh **Oracle Free** PDB the limit is often **too low for `CREATE VECTOR INDEX`**. **Seeding still succeeds** — embeddings are stored; only the optional HNSW “shortcut” is missing. That is **not** an application failure: the CLI uses **exact** `VECTOR_DISTANCE` + `FETCH FIRST` when no index exists (fast for thousands of rows).
 
-**Built-in mitigation:** when the first `CREATE VECTOR INDEX` hits **ORA-51962**, this repo **automatically retries** with lighter HNSW settings (smaller `NEIGHBORS` / `EFCONSTRUCTION`, then optional omission of `WITH TARGET ACCURACY`). That often succeeds on the same memory budget. If every tier still fails, use the SYSDBA step below or rely on **exact** vector search (fine for modest corpus sizes).
+**Built-in mitigation:** when the first `CREATE VECTOR INDEX` hits **ORA-51962**, this repo **automatically retries** with lighter HNSW settings. Tier retries are logged at **DEBUG**; if all tiers fail you get a single **INFO** line (not `ERROR`) explaining that exact search is in use. To **skip** index creation entirely on known-tight instances: `python3 -m papersearch.cli seed ... --skip-vector-index`. Otherwise use the SYSDBA step below if your PDB allows a larger pool.
 
 **Fix (automated in this repo):** run once as SYS. With the default **`gvenzl/oracle-free`** compose file, the SYS password is **`ORACLE_SYS_PASSWORD`** in `.env` (passed into the container as **`ORACLE_PASSWORD`**). If you switch to the **official** Oracle Free image, use whatever variable that image documents (often **`ORACLE_PWD`**) and set **`ORACLE_SYS_PASSWORD`** to match for the Python helper.
 
