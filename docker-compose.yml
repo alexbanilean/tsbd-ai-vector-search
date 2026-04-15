@@ -1,0 +1,33 @@
+# Oracle Database 23ai Free — community image on Docker Hub (no Oracle Container Registry login).
+# Same Oracle Free capabilities for VECTOR / AI Vector Search demos.
+# Image: https://github.com/gvenzl/oci-oracle-free
+#
+# Optional official image (requires free Oracle account + docker login):
+#   see README section "Official Oracle Container Registry (optional)".
+services:
+  oracle:
+    image: gvenzl/oracle-free:23-slim
+    container_name: papersearch-oracle
+    hostname: papersearch-oracle
+    environment:
+      ORACLE_PASSWORD: ${ORACLE_SYS_PASSWORD:-PaperSearch_Sys_1}
+      APP_USER: papersearch
+      APP_USER_PASSWORD: ${ORACLE_APP_PASSWORD:-PaperSearch_App_1}
+    ports:
+      - "${ORACLE_PORT:-1521}:1521"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "healthcheck.sh",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 40
+      start_period: 120s
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+    shm_size: 1g
+
+volumes:
+  oracle-data:

@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PaperSearch — Oracle AI Vector Search</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #070a12;
+        --panel: rgba(18, 24, 38, 0.72);
+        --stroke: rgba(120, 140, 190, 0.22);
+        --text: #e8ecff;
+        --muted: #9aa4c7;
+        --accent: #6ee7ff;
+        --accent-2: #a78bfa;
+        --good: #4ade80;
+        --warn: #fbbf24;
+        --shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+        --radius: 16px;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "IBM Plex Sans", system-ui, sans-serif;
+        background: radial-gradient(1200px 800px at 10% -10%, #1b2550 0%, transparent 55%),
+          radial-gradient(900px 600px at 90% 0%, #301b4d 0%, transparent 50%), var(--bg);
+        color: var(--text);
+      }
+      .wrap {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 32px 20px 64px;
+      }
+      header {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 28px;
+      }
+      h1 {
+        margin: 0;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        font-size: clamp(1.6rem, 2.4vw, 2.1rem);
+      }
+      .sub {
+        color: var(--muted);
+        max-width: 72ch;
+        line-height: 1.55;
+      }
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 6px;
+      }
+      .pill {
+        border: 1px solid var(--stroke);
+        background: rgba(255, 255, 255, 0.03);
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .pill strong {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .search {
+        display: grid;
+        gap: 12px;
+        padding: 18px;
+        border-radius: var(--radius);
+        border: 1px solid var(--stroke);
+        background: var(--panel);
+        backdrop-filter: blur(14px);
+        box-shadow: var(--shadow);
+      }
+      label {
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      textarea {
+        width: 100%;
+        min-height: 110px;
+        resize: vertical;
+        border-radius: 12px;
+        border: 1px solid var(--stroke);
+        background: rgba(0, 0, 0, 0.35);
+        color: var(--text);
+        padding: 12px 14px;
+        font-size: 15px;
+        line-height: 1.45;
+        outline: none;
+      }
+      textarea:focus {
+        border-color: rgba(110, 231, 255, 0.45);
+        box-shadow: 0 0 0 3px rgba(110, 231, 255, 0.12);
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: end;
+        justify-content: space-between;
+      }
+      .k {
+        display: grid;
+        gap: 6px;
+        min-width: 120px;
+      }
+      input[type="number"] {
+        width: 120px;
+        border-radius: 10px;
+        border: 1px solid var(--stroke);
+        background: rgba(0, 0, 0, 0.35);
+        color: var(--text);
+        padding: 10px 12px;
+      }
+      button {
+        border: 0;
+        border-radius: 12px;
+        padding: 12px 18px;
+        font-weight: 600;
+        cursor: pointer;
+        color: #041016;
+        background: linear-gradient(120deg, var(--accent), var(--accent-2));
+        box-shadow: 0 12px 40px rgba(110, 231, 255, 0.18);
+      }
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      .meta {
+        margin-top: 14px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 16px;
+        color: var(--muted);
+        font-size: 13px;
+        font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .meta span strong {
+        color: var(--good);
+        font-weight: 500;
+      }
+      .results {
+        margin-top: 22px;
+        display: grid;
+        gap: 14px;
+      }
+      article {
+        border-radius: var(--radius);
+        border: 1px solid var(--stroke);
+        background: rgba(12, 16, 28, 0.55);
+        padding: 16px 16px 14px;
+      }
+      article h2 {
+        margin: 0 0 8px;
+        font-size: 1.05rem;
+        letter-spacing: -0.01em;
+      }
+      .abs {
+        margin: 0;
+        color: #c7cff0;
+        line-height: 1.55;
+        font-size: 14px;
+      }
+      .foot {
+        margin-top: 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 14px;
+        font-size: 12px;
+        color: var(--muted);
+        font-family: "IBM Plex Mono", ui-monospace, monospace;
+      }
+      .score {
+        color: var(--accent);
+      }
+      .error {
+        margin-top: 16px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        border: 1px solid rgba(251, 191, 36, 0.35);
+        background: rgba(251, 191, 36, 0.08);
+        color: #ffe6a8;
+        white-space: pre-wrap;
+      }
+      footer {
+        margin-top: 36px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+      a {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <h1>PaperSearch — semantic retrieval in Oracle Database 23ai</h1>
+        <p class="sub">
+          Live demo: natural-language queries are embedded locally, then <strong>VECTOR_DISTANCE</strong> runs
+          inside Oracle on a <strong>VECTOR(384, FLOAT32)</strong> column backed by an optional
+          <strong>HNSW</strong> index (<em>FETCH APPROXIMATE</em> when available). Optional
+          <strong>hybrid filters</strong> (year range + substring on arXiv <code>categories</code>) are pushed into SQL
+          as plain predicates alongside vector ordering.
+        </p>
+        <div class="pill-row" id="pills"></div>
+      </header>
+
+      <section class="search">
+        <label for="q">Query (try conceptual paraphrases, not only keywords)</label>
+        <textarea id="q" placeholder="e.g. models that retrieve passages for question answering without sparse lexical scoring…"></textarea>
+        <div class="row">
+          <div class="k">
+            <label for="k">top_k</label>
+            <input id="k" type="number" min="1" max="50" value="8" />
+          </div>
+          <div class="k">
+            <label for="ymin">min year</label>
+            <input id="ymin" type="number" min="1991" max="2100" placeholder="optional" />
+          </div>
+          <div class="k">
+            <label for="ymax">max year</label>
+            <input id="ymax" type="number" min="1991" max="2100" placeholder="optional" />
+          </div>
+          <div class="k" style="min-width: 200px">
+            <label for="cat">category contains</label>
+            <input id="cat" type="text" placeholder="e.g. cs.AI" maxlength="200" />
+          </div>
+          <button id="go" type="button">Search in Oracle</button>
+        </div>
+        <div class="meta" id="meta" hidden></div>
+      </section>
+
+      <div id="err" class="error" hidden></div>
+      <div class="results" id="results"></div>
+
+      <footer>
+        API: <code>/v1/search</code> · Health: <code>/v1/health</code> · OpenAPI:
+        <a href="/docs">/docs</a>
+      </footer>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const pills = $("pills");
+      const meta = $("meta");
+      const results = $("results");
+      const err = $("err");
+
+      async function refreshHealth() {
+        try {
+          const r = await fetch("/v1/health");
+          const h = await r.json();
+          pills.innerHTML = "";
+          const add = (label, value) => {
+            const p = document.createElement("span");
+            p.className = "pill";
+            p.innerHTML = `<strong>${label}</strong> ${value}`;
+            pills.appendChild(p);
+          };
+          add("API", h.status);
+          add("Papers", h.papers_count ?? "—");
+          add("Vector index", h.vector_index ?? "—");
+          add("Embeddings", `${h.embedding_dimension}d`);
+        } catch {
+          pills.innerHTML = `<span class="pill"><strong>API</strong> unreachable</span>`;
+        }
+      }
+
+      function hideError() {
+        err.hidden = true;
+        err.textContent = "";
+      }
+
+      function showError(msg) {
+        err.hidden = false;
+        err.textContent = msg;
+      }
+
+      function renderMeta(resp) {
+        meta.hidden = false;
+        const hy = [];
+        if (resp.min_year != null) hy.push(`min_year=${resp.min_year}`);
+        if (resp.max_year != null) hy.push(`max_year=${resp.max_year}`);
+        if (resp.category_contains) hy.push(`category≈${resp.category_contains}`);
+        const hys = hy.length ? ` · <strong>hybrid</strong> ${hy.join(", ")}` : "";
+        meta.innerHTML = `
+          <span><strong>approximate</strong> ${String(resp.approximate)}</span>
+          <span><strong>engine</strong> ${resp.engine}</span>
+          <span><strong>hits</strong> ${resp.results.length}</span>${hys}
+        `;
+      }
+
+      function renderResults(resp) {
+        results.innerHTML = "";
+        for (const p of resp.results) {
+          const el = document.createElement("article");
+          const year = p.year != null ? ` · ${p.year}` : "";
+          const venue = p.venue ? ` · ${p.venue}` : "";
+          const cat = p.category ? ` · ${escapeHtml(p.category)}` : "";
+          el.innerHTML = `
+            <h2>${escapeHtml(p.title)}</h2>
+            <p class="abs">${escapeHtml(p.abstract)}</p>
+            <div class="foot">
+              <span class="score">similarity ${p.similarity.toFixed(4)}</span>
+              <span>distance ${p.distance.toFixed(6)}</span>
+              <span>${escapeHtml(p.authors || "Unknown authors")}${year}${venue}${cat}</span>
+            </div>
+          `;
+          results.appendChild(el);
+        }
+      }
+
+      function escapeHtml(s) {
+        return String(s)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      $("go").addEventListener("click", async () => {
+        hideError();
+        results.innerHTML = "";
+        meta.hidden = true;
+        const query = $("q").value.trim();
+        const top_k = Number($("k").value || "8");
+        const btn = $("go");
+        btn.disabled = true;
+        const payload = { query, top_k };
+        const ymin = $("ymin").value.trim();
+        const ymax = $("ymax").value.trim();
+        const cat = $("cat").value.trim();
+        if (ymin) payload.min_year = Number(ymin);
+        if (ymax) payload.max_year = Number(ymax);
+        if (cat) payload.category_contains = cat;
+        try {
+          const r = await fetch("/v1/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const bodyText = await r.text();
+          let json;
+          try {
+            json = JSON.parse(bodyText);
+          } catch {
+            throw new Error(bodyText || `HTTP ${r.status}`);
+          }
+          if (!r.ok) throw new Error(json.detail || json.message || bodyText || `HTTP ${r.status}`);
+          renderMeta(json);
+          renderResults(json);
+        } catch (e) {
+          showError(String(e && e.message ? e.message : e));
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
+      refreshHealth();
+    </script>
+  </body>
+</html>

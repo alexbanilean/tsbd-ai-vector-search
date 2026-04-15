@@ -1,0 +1,19 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+.DS_Store
+*.log
+models_cache/
+sentence_transformers_cache/
+torch_cache/
+# Kaggle arXiv snapshot + generated corpus (large)
+data/raw/
+data/papers.kaggle.json
