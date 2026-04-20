@@ -192,6 +192,8 @@ make demo
 
 `make demo` assumes Docker can reach **Docker Hub** (default image pulls there on first `up` if needed). It does **not** run `docker login` for you unless you switch to the **official** registry image.
 
+The demo runs **`set-vector-memory` best-effort** (ignored if Oracle returns **ORA-51955** / exit code 3). On capped Oracle Free, HNSW may never build; **exact** vector search still works. Use **`make oracle-vector-memory`** alone when you want a non-zero exit if the pool cannot be raised.
+
 ---
 
 ## API surface

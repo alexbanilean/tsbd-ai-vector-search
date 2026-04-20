@@ -1,4 +1,4 @@
-.PHONY: install oracle-up oracle-wait oracle-vector-memory init seed seed-kaggle reindex-vector import-kaggle serve demo lint test
+.PHONY: install oracle-up oracle-wait oracle-vector-memory demo-vector-memory init seed seed-kaggle reindex-vector import-kaggle serve demo lint test
 
 install:
 	python3 -m pip install -e ".[dev]"
@@ -11,6 +11,10 @@ oracle-wait:
 
 oracle-vector-memory:
 	python3 -m papersearch.cli set-vector-memory
+
+# Best-effort: Oracle Free often returns ORA-51955 (exit 3); demo still works without HNSW.
+demo-vector-memory:
+	-python3 -m papersearch.cli set-vector-memory
 
 reindex-vector:
 	python3 -m papersearch.cli reindex-vector
@@ -30,7 +34,7 @@ seed-kaggle:
 serve:
 	python3 -m papersearch.cli serve
 
-demo: oracle-up install oracle-wait oracle-vector-memory init seed serve
+demo: oracle-up install oracle-wait demo-vector-memory init seed serve
 
 lint:
 	python3 -m ruff check src tests
