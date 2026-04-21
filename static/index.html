@@ -278,6 +278,7 @@
           add("API", h.status);
           add("Papers", h.papers_count ?? "—");
           add("Vector index", h.vector_index ?? "—");
+          add("Search path", h.search_path ?? "exact");
           add("Embeddings", `${h.embedding_dimension}d`);
         } catch {
           pills.innerHTML = `<span class="pill"><strong>API</strong> unreachable</span>`;
@@ -294,14 +295,24 @@
         err.textContent = msg;
       }
 
-      function renderMeta(resp) {
+      function formatMs(ms) {
+        if (ms < 1000) return `${Math.round(ms)} ms`;
+        return `${(ms / 1000).toFixed(2)} s`;
+      }
+
+      function renderMeta(resp, elapsedMs) {
         meta.hidden = false;
         const hy = [];
         if (resp.min_year != null) hy.push(`min_year=${resp.min_year}`);
         if (resp.max_year != null) hy.push(`max_year=${resp.max_year}`);
         if (resp.category_contains) hy.push(`category≈${resp.category_contains}`);
         const hys = hy.length ? ` · <strong>hybrid</strong> ${hy.join(", ")}` : "";
+        const time =
+          elapsedMs != null
+            ? `<span><strong>search time</strong> ${formatMs(elapsedMs)}</span>`
+            : "";
         meta.innerHTML = `
+          ${time}
           <span><strong>approximate</strong> ${String(resp.approximate)}</span>
           <span><strong>engine</strong> ${resp.engine}</span>
           <span><strong>hits</strong> ${resp.results.length}</span>${hys}
@@ -353,12 +364,14 @@
         if (ymax) payload.max_year = Number(ymax);
         if (cat) payload.category_contains = cat;
         try {
+          const t0 = performance.now();
           const r = await fetch("/v1/search", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
           });
           const bodyText = await r.text();
+          const elapsedMs = performance.now() - t0;
           let json;
           try {
             json = JSON.parse(bodyText);
@@ -366,7 +379,7 @@
             throw new Error(bodyText || `HTTP ${r.status}`);
           }
           if (!r.ok) throw new Error(json.detail || json.message || bodyText || `HTTP ${r.status}`);
-          renderMeta(json);
+          renderMeta(json, elapsedMs);
           renderResults(json);
         } catch (e) {
           showError(String(e && e.message ? e.message : e));

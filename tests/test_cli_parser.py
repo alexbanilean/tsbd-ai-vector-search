@@ -18,6 +18,13 @@ def test_cli_parser_seed_defaults():
     assert args.path == "data/papers.json"
     assert args.replace is False
     assert args.skip_vector_index is False
+    assert args.max_papers is None
+
+
+def test_cli_parser_seed_max_papers():
+    p = build_parser()
+    args = p.parse_args(["seed", "--max-papers", "300"])
+    assert args.max_papers == 300
 
 
 def test_cli_parser_seed_skip_vector_index():
@@ -55,7 +62,7 @@ def test_cli_search_parser():
 def test_cli_import_kaggle_defaults():
     p = build_parser()
     args = p.parse_args(["import-kaggle"])
-    assert args.max_papers == 1200
+    assert args.max_papers is None
     assert args.output == "data/papers.kaggle.json"
     assert args.overwrite is False
 

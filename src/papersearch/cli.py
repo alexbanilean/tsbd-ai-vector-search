@@ -51,6 +51,17 @@ def cmd_seed(args: argparse.Namespace) -> int:
         return 1
     raw = json.loads(path.read_text(encoding="utf-8"))
     papers = [PaperIn.model_validate(x) for x in raw]
+    cap = (
+        args.max_papers if args.max_papers is not None else settings.import_max_papers
+    )
+    if len(papers) > cap:
+        logger.info(
+            "Truncating seed corpus from %s to %s papers (env PAPERSEARCH_IMPORT_MAX_PAPERS "
+            "or --max-papers)",
+            len(papers),
+            cap,
+        )
+        papers = papers[:cap]
 
     combined = [combined_text(p.title, p.abstract) for p in papers]
     matrix = embed_texts(combined, settings=settings)
@@ -162,6 +173,10 @@ def cmd_search(args: argparse.Namespace) -> int:
 
 
 def cmd_import_kaggle(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    max_papers = (
+        args.max_papers if args.max_papers is not None else settings.import_max_papers
+    )
     out = Path(args.output)
     if out.exists() and not args.overwrite:
         print(
@@ -177,7 +192,7 @@ def cmd_import_kaggle(args: argparse.Namespace) -> int:
         n = build_corpus_json(
             path,
             out,
-            max_papers=args.max_papers,
+            max_papers=max_papers,
         )
     except Exception as e:  # noqa: BLE001
         logger.exception("import-kaggle failed")
@@ -217,6 +232,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--skip-vector-index",
         action="store_true",
         help="Do not attempt CREATE VECTOR INDEX (quieter on capped Oracle Free)",
+    )
+    p_seed.add_argument(
+        "--max-papers",
+        type=int,
+        default=None,
+        dest="max_papers",
+        metavar="N",
+        help="Load at most N papers from JSON (overrides PAPERSEARCH_IMPORT_MAX_PAPERS)",
     )
     p_seed.set_defaults(func=cmd_seed)
 
@@ -281,7 +304,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Allow replacing an existing --output file",
     )
-    p_ig.add_argument("--max-papers", type=int, default=1200, dest="max_papers")
+    p_ig.add_argument(
+        "--max-papers",
+        type=int,
+        default=None,
+        dest="max_papers",
+        metavar="N",
+        help="Cap papers written (default: PAPERSEARCH_IMPORT_MAX_PAPERS from .env, else 1200)",
+    )
     p_ig.set_defaults(func=cmd_import_kaggle)
 
     p_srv = sub.add_parser("serve", help="Run FastAPI + static UI")

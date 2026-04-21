@@ -116,6 +116,7 @@ erDiagram
 | **Python** | 3.11+ recommended (CI-style sanity on 3.12 works) |
 | **Oracle** | **Oracle Database 23ai Free** — default **`gvenzl/oracle-free:23-slim`** (Docker Hub, no Oracle account). Optional: official registry image — see below. |
 | **Corpus** | Bundled `data/papers.json` (sample) **or** Kaggle [Cornell-University/arxiv](https://www.kaggle.com/datasets/Cornell-University/arxiv) → default export **`data/papers.kaggle.json`** (does not overwrite the sample file) |
+| **Import / seed cap** | `PAPERSEARCH_IMPORT_MAX_PAPERS`: default for **`import-kaggle`**; **`seed`** keeps only the **first N** rows from the JSON (override: **`seed --max-papers N`**) |
 | **CLI** | `papersearch search "…"` (tabulated hits) |
 | **Driver** | `python-oracledb` thin mode (no Instant Client required) |
 | **Embeddings** | `sentence-transformers/all-MiniLM-L6-v2` → **384d** |
@@ -134,7 +135,58 @@ erDiagram
 | **Tight** | 6 GiB | ≥12 GB free | May work with smaller concurrent apps closed |
 | **Cloud VM** | `Standard_D4s_v5` class (4 vCPU / 16 GiB) | Premium SSD | Smooth Docker experience for running the environment |
 
-If the database refuses to build the **HNSW** graph due to memory budget, see **Troubleshooting → ORA-51962** (run `set-vector-memory` once per PDB).
+If **`CREATE VECTOR INDEX`** fails with **ORA-51962** or **`set-vector-memory`** returns **ORA-51955**, configure the **SPFILE** inside the container (next section), **restart** Oracle, then **`seed`** / **`reindex-vector`** again.
+
+---
+
+## Oracle: vector memory and SGA (SPFILE)
+
+Raising **`vector_memory_size`** from the Python CLI alone often hits **ORA-51955** on Oracle Database Free in Docker. Setting **SPFILE** parameters as **SYSDBA**, then **restarting** the DB container, is the reliable approach. Adjust sizes if your Docker memory budget is smaller than the example.
+
+**1. SQL\*Plus as SYS in the running container**
+
+```bash
+docker exec -it papersearch-oracle sqlplus / as sysdba
+```
+
+**2. Instance parameters (example — tune to your host)**
+
+```sql
+ALTER SYSTEM SET vector_memory_size = 512M SCOPE=SPFILE;
+ALTER SYSTEM SET sga_target = 1500M SCOPE=SPFILE;
+ALTER SYSTEM SET pga_aggregate_target = 512M SCOPE=SPFILE;
+```
+
+Exit SQL\*Plus (`EXIT`).
+
+**3. Restart Oracle so SPFILE changes apply**
+
+```bash
+docker restart papersearch-oracle
+```
+
+Wait until the service is ready (`docker compose ps` or `python3 scripts/wait_for_oracle.py`).
+
+**4. (Optional) Inspect pools**
+
+```sql
+SELECT pool, name, bytes / 1024 / 1024 AS mb
+FROM v$sgastat
+WHERE pool = 'vector pool' OR name = 'free memory';
+```
+
+**5. App: schema, data, HNSW**
+
+```bash
+python3 scripts/wait_for_oracle.py
+python3 -m papersearch.cli init
+python3 -m papersearch.cli seed --path data/papers.json --replace
+python3 -m papersearch.cli serve
+```
+
+Use **`reindex-vector`** if data is already loaded. Confirm **`GET /v1/health`**: **`vector_index` = `yes`**, **`search_path` = `approximate`** with **`PAPERSEARCH_USE_APPROXIMATE_FETCH=true`**.
+
+The CLI **`set-vector-memory`** command uses **`SCOPE=BOTH` / `MEMORY`** in **FREEPDB1** for quick tests; **SPFILE + restart** is what persists when dynamic `ALTER SYSTEM` is rejected.
 
 ---
 
@@ -152,13 +204,21 @@ This repo’s **`docker-compose.yml`** uses **`gvenzl/oracle-free:23-slim`** fro
 cp .env.example .env
 docker compose pull oracle   # optional; pulls from Docker Hub
 docker compose up -d oracle
+```
+
+**2. (Recommended for HNSW)** If you need **`vector_memory_size`** / SGA headroom, run the **SPFILE + `docker restart`** steps in **[Oracle: vector memory and SGA (SPFILE)](#oracle-vector-memory-and-sga-spfile)** before loading data.
+
+**3. Install app and load corpus**
+
+```bash
 python3 -m pip install -e ".[dev]"
 python3 scripts/wait_for_oracle.py
-python3 -m papersearch.cli set-vector-memory
 python3 -m papersearch.cli init
 python3 -m papersearch.cli seed --path data/papers.json --replace
 python3 -m papersearch.cli serve
 ```
+
+Optional: **`python3 -m papersearch.cli set-vector-memory`** (best-effort; ignored in **`make demo`** if Oracle returns **ORA-51955**).
 
 ### Official Oracle Container Registry (optional)
 
@@ -190,9 +250,7 @@ Then open **`http://localhost:8000/`** (static UI) and **`http://localhost:8000/
 make demo
 ```
 
-`make demo` assumes Docker can reach **Docker Hub** (default image pulls there on first `up` if needed). It does **not** run `docker login` for you unless you switch to the **official** registry image.
-
-The demo runs **`set-vector-memory` best-effort** (ignored if Oracle returns **ORA-51955** / exit code 3). On capped Oracle Free, HNSW may never build; **exact** vector search still works. Use **`make oracle-vector-memory`** alone when you want a non-zero exit if the pool cannot be raised.
+`make demo` assumes Docker can reach **Docker Hub**. For **HNSW**, run the **[SPFILE + restart](#oracle-vector-memory-and-sga-spfile)** steps once before **`make demo`**, or use **`set-vector-memory`** (best-effort; failures ignored in **`demo-vector-memory`**).
 
 ---
 
@@ -207,6 +265,16 @@ The demo runs **`set-vector-memory` best-effort** (ignored if Oracle returns **O
 
 > Admin routes are intentionally open for local use and demonstrations; **do not expose them publicly** without authentication.
 
+### Health: **vector index no** and **`approximate: false`**
+
+| Field | Meaning |
+|-------|--------|
+| **Papers N** | **`seed`** kept the first **N** rows (**`PAPERSEARCH_IMPORT_MAX_PAPERS`** or **`seed --max-papers`**). |
+| **Vector index no** | No HNSW index yet (pool too small, or **`--skip-vector-index`**). |
+| **`approximate: false`** | Search used **exact** **`FETCH FIRST`** (normal without HNSW). |
+
+To enable **HNSW** + **`FETCH APPROXIMATE`**, follow **[Oracle: vector memory and SGA (SPFILE)](#oracle-vector-memory-and-sga-spfile)**, then **`seed`** or **`reindex-vector`**.
+
 ---
 
 ## Execution and obtained results
@@ -220,9 +288,17 @@ Running the application exposes both a simple web interface and a comprehensive 
 
 ### Screenshots
 
-- **UI Results:** ![Search Interface Screenshot](docs/screenshots/ui_search.png)
-- **API Response:** ![API /docs Screenshot](docs/screenshots/api_docs.jpg)
-- **Container Health:** ![Docker/Health Screenshot](docs/screenshots/health.png)
+- **UI Results:**
+  - ![Search Interface Screenshot](docs/screenshots/ui_search.png)
+  - ![HNSW Search](docs/screenshots/ui_search_v2.png)
+- **API Response:**
+  - ![API /docs Screenshot](docs/screenshots/api_docs.jpg)
+  - ![API /docs V2 Screenshot](docs/screenshots/api_docs_v2.png)
+- **Container Health:**
+  - ![Docker /health Screenshot](docs/screenshots/health.png)
+  - ![Docker /health V2 Screenshot](docs/screenshots/health_v2.png)
+- **HNSW Index:**
+  - ![HNSW Index](docs/screenshots/hnsw_index.png)
 
 ---
 
@@ -232,6 +308,7 @@ To properly evaluate the search system, the following details are essential rega
 
 - **Distance vs. Similarity**: Oracle AI Vector Search, using `VECTOR_DISTANCE` with the `COSINE` metric, returns a **distance** value. A smaller distance implies higher semantic similarity between the query and the documents. In our UI, we convert this to a similarity score defined as `1 / (1 + distance)` strictly for better human readability.
 - **Approximate vs. Exact Search**: When an HNSW index is successfully created in the vector memory, the database executes a `FETCH APPROXIMATE`. This sacrifices a marginal amount of recall for a significant performance boost in query execution time, trading off exact precision for predictable low latency at scale. If memory is tight or the index is missing, exact vector search is seamlessly used through `FETCH FIRST K ROWS ONLY`.
+- **Web UI latency**: The static UI shows **search time** for each query (browser round-trip to **`POST /v1/search`**, including embedding + Oracle).
 
 ---
 
@@ -290,41 +367,17 @@ If this fails with **ORA-51962** (vector memory pool exhausted), the application
 
 ## Troubleshooting
 
-### `ORA-51962: The vector memory area is out of space`
+### ORA-51962 / ORA-51955 (vector pool / HNSW)
 
-Oracle reserves a separate **vector pool** for HNSW / IVF structures. On a fresh **Oracle Free** PDB the limit is often **too low for `CREATE VECTOR INDEX`**. **Seeding still succeeds** — embeddings are stored; only the optional HNSW "shortcut" is missing. That is **not** an application failure: the CLI uses **exact** `VECTOR_DISTANCE` + `FETCH FIRST` when no index exists (fast for thousands of rows).
+1. **Preferred:** **[Oracle: vector memory and SGA (SPFILE)](#oracle-vector-memory-and-sga-spfile)** — `sqlplus` as SYSDBA, **`SCOPE=SPFILE`**, **`docker restart`**, then **`seed`** or **`reindex-vector`**.
 
-**Built-in mitigation:** when the first `CREATE VECTOR INDEX` hits **ORA-51962**, this repo **automatically retries** with lighter HNSW settings. Tier retries are logged at **DEBUG**; if all tiers fail you get a single **INFO** line (not `ERROR`) explaining that exact search is in use. To **skip** index creation entirely on known-tight instances: `python3 -m papersearch.cli seed ... --skip-vector-index`. Otherwise use the SYSDBA step below if your PDB allows a larger pool.
+2. **Automatic retries:** `CREATE VECTOR INDEX` tries lighter HNSW tiers on **ORA-51962**. **`seed --skip-vector-index`** skips index creation.
 
-**Fix (automated in this repo):** run once as SYS. With the default **`gvenzl/oracle-free`** compose file, the SYS password is **`ORACLE_SYS_PASSWORD`** in `.env` (passed into the container as **`ORACLE_PASSWORD`**). If you switch to the **official** Oracle Free image, use whatever variable that image documents (often **`ORACLE_PWD`**) and set **`ORACLE_SYS_PASSWORD`** to match for the Python helper.
+3. **Smaller corpus:** lower **`PAPERSEARCH_IMPORT_MAX_PAPERS`** or **`seed --max-papers`** to ease index build memory.
 
-```bash
-python3 -m papersearch.cli set-vector-memory --size 512M
-python3 -m papersearch.cli reindex-vector
-```
+4. **CLI helper:** `python3 -m papersearch.cli set-vector-memory` (uses **`SCOPE=BOTH`/`MEMORY`** in **FREEPDB1**). If it exits **3** (**ORA-51955**), use the **SPFILE** section above.
 
-Then confirm health shows `vector_index: yes` (`GET /v1/health`).
-
-Equivalent SQL (if you prefer `sqlplus`):
-
-```sql
-ALTER SESSION SET CONTAINER = FREEPDB1;
-ALTER SYSTEM SET vector_memory_size = 512M SCOPE=BOTH;
-```
-
-If `SCOPE=BOTH` is rejected, the CLI falls back to `SCOPE=MEMORY` for the current instance.
-
-### `ORA-51955` / `ORA-02097` when raising `VECTOR_MEMORY_SIZE`
-
-**Oracle Database Free** (notably small-RAM / slim images) can cap the PDB so **no extra vector pool** can be granted (`ORA-51955: … cannot be increased more than 0 MB`). The CLI command `set-vector-memory` detects this and exits with code **3** with a short hint instead of suggesting a wrong password.
-
-Semantic search **still works** using **exact** top‑`k` over `VECTOR_DISTANCE` without an HNSW index: the API already uses **`FETCH FIRST`** (not `FETCH APPROXIMATE`) when no vector index exists.
-
-Optionally set **`PAPERSEARCH_USE_APPROXIMATE_FETCH=false`** in `.env` so configuration matches "no approximate/HNSW" for docs and health reporting.
-
-### Other `ORA-` errors when creating the vector index
-
-If **all** automatic HNSW tiers fail and raising `VECTOR_MEMORY_SIZE` is not possible, drop any stray index on `papers(embedding)` and re-run `reindex-vector`. If the PDB allows more pool, try **`--size 1G`** with `set-vector-memory` (subject to SGA limits — see Oracle *Size the Vector Pool* documentation).
+Without HNSW, search still uses **exact** **`VECTOR_DISTANCE`** (**`FETCH FIRST`**).
 
 ### `DPY-4005: timed out waiting for the connection pool`
 

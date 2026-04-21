@@ -27,7 +27,9 @@ services:
       start_period: 120s
     volumes:
       - oracle-data:/opt/oracle/oradata
-    shm_size: 1g
+    # Oracle uses shared memory heavily; too small shm can cap SGA/vector pool and block HNSW.
+    # Increase if set-vector-memory hits ORA-51955 (e.g. 2g or 4g). Match Docker Desktop RAM.
+    shm_size: ${ORACLE_SHM_SIZE:-2g}
 
 volumes:
   oracle-data:

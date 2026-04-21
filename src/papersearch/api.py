@@ -54,7 +54,13 @@ def health(settings: SettingsDep):
         with connection(settings) as conn:
             banner = safe_banner(oracle_version_string(conn))
             with conn.cursor() as cursor:
-                idx = "yes" if vector_index_exists(cursor) else "no"
+                has_idx = vector_index_exists(cursor)
+                idx = "yes" if has_idx else "no"
+            path = (
+                "approximate"
+                if (has_idx and settings.use_approximate_fetch)
+                else "exact"
+            )
             return HealthResponse(
                 status="ok",
                 oracle=banner,
@@ -62,6 +68,7 @@ def health(settings: SettingsDep):
                 embedding_dimension=settings.embedding_dimension,
                 papers_count=count_papers(conn),
                 vector_index=idx,
+                search_path=path,
             )
     except Exception as e:  # noqa: BLE001 — surface connectivity issues for demos
         logger.warning("Health degraded: %s", e)
@@ -72,6 +79,7 @@ def health(settings: SettingsDep):
             embedding_dimension=settings.embedding_dimension,
             papers_count=None,
             vector_index=None,
+            search_path="exact",
         )
 
 

@@ -9,7 +9,10 @@ description = "Semantic search over academic papers using Oracle AI Vector Searc
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "Bănilean Alexandru-Ioan" }]
+authors = [
+  { name = "Bănilean Alexandru-Ioan" },
+  { name = "Niță-Gheorghiaș Anelis-Ramona" },
+]
 dependencies = [
   "fastapi>=0.115.0",
   "uvicorn[standard]>=0.32.0",

@@ -36,6 +36,13 @@ class Settings(BaseSettings):
         description="Use FETCH APPROXIMATE with HNSW (requires vector index)",
     )
 
+    import_max_papers: int = Field(
+        default=1200,
+        ge=1,
+        le=2_000_000,
+        description="Max papers: import-kaggle default; seed truncates JSON to first N rows",
+    )
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def split_origins(cls, v: object) -> str:

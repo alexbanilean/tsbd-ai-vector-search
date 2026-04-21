@@ -16,10 +16,9 @@ _DEFAULT_PDB = "FREEPDB1"
 
 _VECTOR_MEMORY_CAP_HELP: Final[str] = (
     "Oracle cannot increase VECTOR_MEMORY_SIZE for this PDB (ORA-51955 / similar). "
-    "This is common on Oracle Database Free with tight RAM. You can still run the demo: "
-    "continue with init / seed (or reindex-vector). Search uses exact top-k over "
-    "VECTOR_DISTANCE when no HNSW index exists. Optionally set "
-    "PAPERSEARCH_USE_APPROXIMATE_FETCH=false in .env so settings match that mode."
+    "Use SPFILE + container restart (README: Oracle vector memory and SGA). "
+    "Until then, search uses exact VECTOR_DISTANCE without HNSW. "
+    "Optionally set PAPERSEARCH_USE_APPROXIMATE_FETCH=false in .env when no index exists."
 )
 
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -95,6 +95,8 @@ class HealthResponse(BaseModel):
     embedding_dimension: int
     papers_count: int | None = None
     vector_index: str | None = None
+    # "approximate" only when HNSW exists and PAPERSEARCH_USE_APPROXIMATE_FETCH is true
+    search_path: Literal["exact", "approximate"] = "exact"
 
 
 class IngestResponse(BaseModel):
